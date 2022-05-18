@@ -8,21 +8,20 @@ remove_background и т.д.)
 Видео во время обработки отображается.
 """
 # Модуль с функциями
-import utils
+import run
 # Прочее
 import os
 import sys
 import tensorflow_hub as hub
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
-# print(tf.__version__)
 
 # Допустимые форматы
 img_type_list = ['.jpg', '.jpeg', '.png']
 
 # Режимы работы
 # TODO: режимы работы пока не задействованы
-operation_mode_list = ['object_detection', 'inst_segmentation', 'remove_background']
+operation_mode_list = ['object_detection', 'instant_segmentation', 'remove_background']
 
 
 def process(operation_mode, source_path, out_path):
@@ -48,7 +47,7 @@ def process(operation_mode, source_path, out_path):
             if file_extension in img_type_list:
                 img_files.append(f)
 
-    # Если нужно скрыть наличие GPU
+    # Закомментировать, если не нужно скрывать наличие GPU
     os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
     if tf.test.gpu_device_name():
         print('GPU found')
@@ -65,7 +64,12 @@ def process(operation_mode, source_path, out_path):
         img_file = os.path.join(source_path, img)
         out_file = os.path.join(out_path, 'out_' + img)
         # Вызов функции предикта
-        _ = utils.img_predict(operation_mode, model, img_file, out_file)
+        if operation_mode == 'object_detection':
+            _ = run.img_detection(model, img_file, out_file)
+        if operation_mode == 'instant_segmentation':
+            _ = run.img_segmention(model, img_file, out_file)
+        if operation_mode == 'remove_background':
+            _ = run.img_background(model, img_file, out_file)
 
     # Сообщаем что обработали
     if len(img_files) == 0:
