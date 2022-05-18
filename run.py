@@ -188,9 +188,11 @@ def img_background(model, img_file, out_file):
             # TODO: Исправить формирование имён выходных файлов
             curr_file = out_file[:-5] + '_' + str(i) + out_file[-5:]
             print(curr_file, scores[i])
-            plt.figure(figsize=(24, 32))
-            plt.imshow(image_bgrm)
-            plt.savefig(curr_file)
+            # plt.figure(figsize=(24, 32))
+            # plt.imshow(image_bgrm)
+            # plt.savefig(curr_file)
+            result = Image.fromarray(image_bgrm)
+            result.save(curr_file)
 
     # имя и путь выходного файла сейчас не меняются
     return out_file
