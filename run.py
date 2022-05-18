@@ -182,7 +182,7 @@ def img_background(model, img_file, out_file):
     #     return image_out
 
     for i in range(classes.shape[0]):
-        if scores[i] > 0.9
+        if scores[i] > 0.9:
             image_bgrm = image_np[0].copy()
             image_bgrm = apply_mask(image_bgrm, masks[i])
             # TODO: Исправить формирование имён выходных файлов
