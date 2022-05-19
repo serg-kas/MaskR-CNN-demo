@@ -4,9 +4,9 @@
 import numpy as np
 from six import BytesIO
 from PIL import Image, ImageDraw, ImageFont
-import matplotlib.pyplot as plt
+import os
 import tensorflow as tf
-tf.get_logger().setLevel('ERROR')
+# tf.get_logger().setLevel('ERROR')
 #
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as viz_utils
@@ -42,13 +42,9 @@ def img_detection(model, img_file, out_file):
         min_score_thresh=.30,
         agnostic_mode=False)
 
-    plt.figure(figsize=(24, 32))
-    plt.imshow(image_np_with_detections[0])
-    # plt.show()
-    plt.savefig(out_file)
-
-    # имя и путь выходного файла сейчас не меняются
-    return out_file
+    result = Image.fromarray(image_np_with_detections[0])
+    result.save(out_file)
+    return
 
 
 # Функция предикта instance segmentation
@@ -93,13 +89,9 @@ def img_segmention(model, img_file, out_file):
         instance_masks=result.get('detection_masks_reframed', None),
         line_thickness=8)
 
-    plt.figure(figsize=(24, 32))
-    plt.imshow(image_np_with_mask[0])
-    # plt.show()
-    plt.savefig(out_file)
-
-    # имя и путь выходного файла сейчас не меняются
-    return out_file
+    result = Image.fromarray(image_np_with_mask[0])
+    result.save(out_file)
+    return
 
 
 # Функция удаления фона
@@ -132,7 +124,7 @@ def img_background(model, img_file, out_file):
         result['detection_masks_reframed'] = detection_masks_reframed.numpy()
 
     # Оставим только класс person == 1
-    boxes = result['detection_boxes'][0]
+    # boxes = result['detection_boxes'][0]
     classes = (result['detection_classes'][0] + label_id_offset).astype(int)
     scores = result['detection_scores'][0]
     #
@@ -185,14 +177,11 @@ def img_background(model, img_file, out_file):
         if scores[i] > 0.9:
             image_bgrm = image_np[0].copy()
             image_bgrm = apply_mask(image_bgrm, masks[i])
-            # TODO: Исправить формирование имён выходных файлов
-            curr_file = out_file[:-5] + '_' + str(i) + out_file[-5:]
-            print(curr_file, scores[i])
-            # plt.figure(figsize=(24, 32))
-            # plt.imshow(image_bgrm)
-            # plt.savefig(curr_file)
+            # Если найден не один объект, то будет несколько выходных файлов
+            filename, file_extension = os.path.splitext(out_file)
+            filename += '_' + str(i)
+            curr_file = filename + file_extension
+            print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
             result = Image.fromarray(image_bgrm)
             result.save(curr_file)
-
-    # имя и путь выходного файла сейчас не меняются
-    return out_file
+    return

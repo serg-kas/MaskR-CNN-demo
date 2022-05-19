@@ -1,27 +1,42 @@
 """
 Демонстрация предобученной архитектуры Mask-R-CNN в
-нескольких режимах работы (object detection, segmentation,
-remove_background и т.д.)
+нескольких режимах работы (object detection, segmentation,remove_background).
 При запуске обрабатывает все файлы из папки source_files
 Результат помещает в папку out_files, добавляя к имени "out_"
-Если файл с таким названием уже обрабатывался, то его не трогает.
-Видео во время обработки отображается.
+Если файл с таким названием уже обрабатывался (есть в папке out_files), то его пропускает
+Режим работы можно передать параметром командной строки.
 """
 # Модуль с функциями
 import run
 # Прочее
-import os
 import sys
-import tensorflow_hub as hub
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # закомментировать для использования GPU
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'   # уровень 2 - только сообщения об ошибках
 import tensorflow as tf
-tf.get_logger().setLevel('ERROR')
+import tensorflow_hub as hub
 
-# Допустимые форматы
+# Допустимые форматы изображений
 img_type_list = ['.jpg', '.jpeg', '.png']
-
 # Режимы работы
-# TODO: режимы работы пока не задействованы
 operation_mode_list = ['object_detection', 'instant_segmentation', 'remove_background']
+default_mode = operation_mode_list[2]  # режим работы по умолчанию
+# Модель URL
+MODEL_NAME = "https://hub.tensorflow.google.cn/tensorflow/mask_rcnn/inception_resnet_v2_1024x1024/1"
+
+
+# Функция получения модели
+def get_model(model_name):
+    """
+    :param model_name: имя модели для загрузки
+    :return: model
+    """
+    if tf.test.is_gpu_available():
+        print('GPU found')
+    else:
+        print('No GPU found')
+    model = hub.load(model_name)
+    return model
 
 
 def process(operation_mode, source_path, out_path):
@@ -42,45 +57,43 @@ def process(operation_mode, source_path, out_path):
     img_files = []
     for f in source_files:
         filename, file_extension = os.path.splitext(f)
-        # print(f,filename,file_extension)
+        # TODO: Если картинка дает несколько выходных файлов, то она будет повторно обрабатываться
         if not (('out_'+f) in out_files):
             if file_extension in img_type_list:
                 img_files.append(f)
 
-    # Закомментировать, если не нужно скрывать наличие GPU
-    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-    if tf.test.gpu_device_name():
-        print('GPU found')
+    # Если обрабатывать нечего, то выходим
+    if len(img_files) == 0:
+        print('Нет картинок для обработки.')
+        return
     else:
-        print("No GPU found")
+        print('Картинок для обработки: {0}'.format(len(img_files)))
 
-    # Получаем модель
-    model_name = "https://hub.tensorflow.google.cn/tensorflow/mask_rcnn/inception_resnet_v2_1024x1024/1"
-    model = hub.load(model_name)
+    # Парсинг режима работы
+    for mode in operation_mode_list:
+        if operation_mode in mode:
+            operation_mode = mode
+            break
 
-    # Обрабатываем картинки
+    # Получаем модель и обрабатываем картинки
+    model = get_model(MODEL_NAME)
     for img in img_files:
         # полные пути к файлам
         img_file = os.path.join(source_path, img)
         out_file = os.path.join(out_path, 'out_' + img)
         # Вызов функции предикта
         if operation_mode == 'object_detection':
-            _ = run.img_detection(model, img_file, out_file)
+            run.img_detection(model, img_file, out_file)
         if operation_mode == 'instant_segmentation':
-            _ = run.img_segmention(model, img_file, out_file)
+            run.img_segmention(model, img_file, out_file)
         if operation_mode == 'remove_background':
-            _ = run.img_background(model, img_file, out_file)
-
-    # Сообщаем что обработали
-    if len(img_files) == 0:
-        print('Нет картинок для обработки.')
-    else:
-        print('Обработали картинок: {0}'.format(len(img_files)))
+            run.img_background(model, img_file, out_file)
 
 
 if __name__ == '__main__':
-    operation_mode = operation_mode_list[2] if len(sys.argv) <= 1 else sys.argv[1]
+    operation_mode = default_mode if len(sys.argv) <= 1 else sys.argv[1]
     source_path = 'source_files' if len(sys.argv) <= 2 else sys.argv[2]
     out_path = 'out_files' if len(sys.argv) <= 3 else sys.argv[3]
     #
+    print('Режим работы: {}.'.format(operation_mode))
     process(operation_mode, source_path, out_path)
