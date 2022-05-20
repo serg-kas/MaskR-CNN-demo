@@ -15,8 +15,8 @@ import os
 # Допустимые форматы изображений
 img_type_list = ['.jpg', '.jpeg', '.png']
 # Режимы работы
-operation_mode_list = ['object_detection', 'instant_segmentation', 'remove_background']
-default_mode = operation_mode_list[2]  # режим работы по умолчанию
+operation_mode_list = ['object_detection', 'instant_segmentation', 'remove_background', 'test']
+default_mode = operation_mode_list[3]  # режим работы по умолчанию
 # Модель URL
 MODEL_URL = "https://hub.tensorflow.google.cn/tensorflow/mask_rcnn/inception_resnet_v2_1024x1024/1"
 
@@ -71,7 +71,8 @@ def process(operation_mode, source_path, out_path):
             run.img_segmention(model, img_file, out_file)
         if operation_mode == 'remove_background':
             run.img_background(model, img_file, out_file)
-
+        if operation_mode == 'test':
+            run.img_test(model, img_file, out_file)
 
 if __name__ == '__main__':
     operation_mode = default_mode if len(sys.argv) <= 1 else sys.argv[1]
