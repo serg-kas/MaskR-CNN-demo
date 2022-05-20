@@ -18,6 +18,8 @@ from object_detection.utils import ops as utils_ops
 PATH_TO_LABELS = './object_detection/data/mscoco_label_map.pbtxt'
 category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS, use_display_name=True)
 
+# Размер к которому приводить изображение (только функция test)
+IMG_SIZE = 512
 
 # Функция получения модели
 def get_model(model_url):
@@ -36,6 +38,22 @@ def get_model(model_url):
     print('Время загрузки модели: {0:.1f}'.format(time_end))
     return model
 
+# Функция ресайза картинки
+def img_resize(image):
+    curr_w = image.shape[1]
+    curr_h = image.shape[0]
+    # Рассчитаем коэффициент для изменения размера
+    if curr_w > curr_h:
+        scale_img = IMG_SIZE / curr_w
+    else:
+        scale_img = IMG_SIZE / curr_h
+    # Новые размеры изображения
+    new_width = int(curr_w * scale_img)
+    new_height = int(curr_h * scale_img)
+    # делаем ресайз к целевым размерам
+    image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+    return image
+
 
 # Функция предикта object detection
 def img_detection(model, img_file, out_file):
@@ -48,10 +66,10 @@ def img_detection(model, img_file, out_file):
     # запускаем предикт
     time_start = time.time()
     results = model(image_np)
-    time_end = time.time() - time_start
-    print('Время предикта: {0:.1f}'.format(time_end))
     result = {key: value.numpy() for key, value in results.items()}
     # print(result.keys())
+    time_end = time.time() - time_start
+    print('Время предикта: {0:.1f}'.format(time_end))
 
     label_id_offset = 0
     image_np_with_detections = image_np.copy()
@@ -80,13 +98,13 @@ def img_segmention(model, img_file, out_file):
     (im_width, im_height) = image.size
     image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
 
-    # запускаем предикт
+    # Засекаем время и запускаем предикт
     time_start = time.time()
     results = model(image_np)
-    time_end = time.time() - time_start
-    print('Время предикта: {0:.1f}'.format(time_end))
     result = {key: value.numpy() for key, value in results.items()}
     # print(result.keys())
+    time_end = time.time() - time_start
+    print('Время предикта: {0:.1f}'.format(time_end))
 
     label_id_offset = 0
     image_np_with_mask = image_np.copy()
@@ -130,16 +148,16 @@ def img_background(model, img_file, out_file):
     (im_width, im_height) = image.size
     image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
 
-    # запускаем предикт
+    # Засеаем время и запускаем предикт
     time_start = time.time()
     results = model(image_np)
-    time_end = time.time() - time_start
-    print('Время предикта: {0:.1f}'.format(time_end))
     result = {key: value.numpy() for key, value in results.items()}
     # print(result.keys())
+    time_end = time.time() - time_start
+    print('Время предикта: {0:.1f}'.format(time_end))
 
     label_id_offset = 0
-    image_np_with_mask = image_np.copy()
+    # image_np_with_mask = image_np.copy()
 
     if 'detection_masks' in result:
         # we need to convert np.arrays to tensors
@@ -226,20 +244,26 @@ def img_test(model, img_file, out_file):
     # (im_width, im_height) = image.size
     # image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
 
+    # Загрузим картинку и сменим модель цвета
     image = cv2.imread(img_file)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # Сделаем резайз к целевому размеру
+    image = img_resize(image)
+
+    # Добавим ось
     image_np = np.expand_dims(image, axis=0)
 
-    # запускаем предикт
+    # Засекаем время и запускаем предикт
     time_start = time.time()
     results = model(image_np)
-    time_end = time.time() - time_start
-    print('Время предикта: {0:.1f}'.format(time_end))
     result = {key: value.numpy() for key, value in results.items()}
     # print(result.keys())
+    time_end = time.time() - time_start
+    print('Время предикта: {0:.1f}'.format(time_end))
 
     label_id_offset = 0
-    image_np_with_mask = image_np.copy()
+    # image_np_with_mask = image_np.copy()
 
     if 'detection_masks' in result:
         # we need to convert np.arrays to tensors
@@ -270,11 +294,13 @@ def img_test(model, img_file, out_file):
     # https://ru.stackoverflow.com/questions/950969
     def cut_and_blur_contour(img, mask, cnt_thickness=4, kernel=(5, 5)):
         # apply mask
+        # ii = Image.fromarray(img).show()
         img = cv2.bitwise_and(img, img, mask=mask)
         tmp = img.copy()
-
+        # ii = Image.fromarray(img).show()
         # prepare a blurred image
         blur = cv2.GaussianBlur(img, kernel, 0)
+
 
         # find contours
         ret, thresh = cv2.threshold(mask, 127, 255, 0)
