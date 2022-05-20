@@ -11,10 +11,6 @@ import run
 # Прочее
 import sys
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # закомментировать для использования GPU
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'   # уровень 2 - только сообщения об ошибках
-import tensorflow as tf
-import tensorflow_hub as hub
 
 # Допустимые форматы изображений
 img_type_list = ['.jpg', '.jpeg', '.png']
@@ -22,21 +18,7 @@ img_type_list = ['.jpg', '.jpeg', '.png']
 operation_mode_list = ['object_detection', 'instant_segmentation', 'remove_background']
 default_mode = operation_mode_list[2]  # режим работы по умолчанию
 # Модель URL
-MODEL_NAME = "https://hub.tensorflow.google.cn/tensorflow/mask_rcnn/inception_resnet_v2_1024x1024/1"
-
-
-# Функция получения модели
-def get_model(model_name):
-    """
-    :param model_name: имя модели для загрузки
-    :return: model
-    """
-    if tf.test.is_gpu_available():
-        print('GPU found')
-    else:
-        print('No GPU found')
-    model = hub.load(model_name)
-    return model
+MODEL_URL = "https://hub.tensorflow.google.cn/tensorflow/mask_rcnn/inception_resnet_v2_1024x1024/1"
 
 
 def process(operation_mode, source_path, out_path):
@@ -74,9 +56,10 @@ def process(operation_mode, source_path, out_path):
         if operation_mode in mode:
             operation_mode = mode
             break
+    print('Режим работы: {}'.format(operation_mode))
 
     # Получаем модель и обрабатываем картинки
-    model = get_model(MODEL_NAME)
+    model = run.get_model(MODEL_URL)
     for img in img_files:
         # полные пути к файлам
         img_file = os.path.join(source_path, img)
@@ -95,5 +78,4 @@ if __name__ == '__main__':
     source_path = 'source_files' if len(sys.argv) <= 2 else sys.argv[2]
     out_path = 'out_files' if len(sys.argv) <= 3 else sys.argv[3]
     #
-    print('Режим работы: {}.'.format(operation_mode))
     process(operation_mode, source_path, out_path)

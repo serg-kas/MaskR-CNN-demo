@@ -4,15 +4,36 @@
 import numpy as np
 from six import BytesIO
 from PIL import Image, ImageDraw, ImageFont
+import time
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # закомментировать для использования GPU
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'   # уровень 2 - только сообщения об ошибках
 import tensorflow as tf
-# tf.get_logger().setLevel('ERROR')
+import tensorflow_hub as hub
 #
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as viz_utils
 from object_detection.utils import ops as utils_ops
 PATH_TO_LABELS = './object_detection/data/mscoco_label_map.pbtxt'
 category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS, use_display_name=True)
+
+
+# Функция получения модели
+def get_model(model_url):
+    """
+    :param model_name: путь к  модели для загрузки
+    :return: model
+    """
+    if tf.test.is_gpu_available():
+        print('GPU found')
+    else:
+        print('No GPU found')
+
+    time_start = time.time()
+    model = hub.load(model_url)
+    time_end = time.time() - time_start
+    print('Время загрузки модели: {0:.1f}'.format(time_end))
+    return model
 
 
 # Функция предикта object detection
@@ -24,7 +45,10 @@ def img_detection(model, img_file, out_file):
     image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
 
     # запускаем предикт
+    time_start = time.time()
     results = model(image_np)
+    time_end = time.time() - time_start
+    print('Время предикта: {0:.1f}'.format(time_end))
     result = {key: value.numpy() for key, value in results.items()}
     # print(result.keys())
 
@@ -56,7 +80,10 @@ def img_segmention(model, img_file, out_file):
     image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
 
     # запускаем предикт
+    time_start = time.time()
     results = model(image_np)
+    time_end = time.time() - time_start
+    print('Время предикта: {0:.1f}'.format(time_end))
     result = {key: value.numpy() for key, value in results.items()}
     # print(result.keys())
 
@@ -103,7 +130,10 @@ def img_background(model, img_file, out_file):
     image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
 
     # запускаем предикт
+    time_start = time.time()
     results = model(image_np)
+    time_end = time.time() - time_start
+    print('Время предикта: {0:.1f}'.format(time_end))
     result = {key: value.numpy() for key, value in results.items()}
     # print(result.keys())
 
