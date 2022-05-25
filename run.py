@@ -18,16 +18,23 @@ from object_detection.utils import ops as utils_ops
 PATH_TO_LABELS = './object_detection/data/mscoco_label_map.pbtxt'
 category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS, use_display_name=True)
 
-# Размер к которому приводить изображение (только функция test)
+# Размер к которому приводить изображение (только в функциях удаления фона)
 IMG_SIZE = 512
+
 
 # Функция получения модели
 def get_model(model_url):
     """
     :param model_name: путь к  модели для загрузки
-    :return: model
+    :return: model: загруженная модель
     """
-    if tf.test.is_gpu_available():
+    # if tf.test.is_gpu_available():
+    #     print('GPU found')
+    # else:
+    #     print('No GPU found')
+
+    gpu_present = bool(len(tf.config.list_physical_devices('GPU')))
+    if gpu_present:
         print('GPU found')
     else:
         print('No GPU found')
@@ -38,15 +45,42 @@ def get_model(model_url):
     print('Время загрузки модели: {0:.1f}'.format(time_end))
     return model
 
-# Функция ресайза картинки
-def img_resize(image):
+
+# Функция наложения маски
+def apply_mask(image, mask):
+    """
+    :param image: исходное изображение
+    :param mask: маска
+    :return: изображение с наложенной маской
+    """
+    image[:, :, 0] = np.where(mask == 0, 127, image[:, :, 0])
+    image[:, :, 1] = np.where(mask == 0, 127, image[:, :, 1])
+    image[:, :, 2] = np.where(mask == 0, 127, image[:, :, 2])
+    return image
+
+
+# Функция наложения оригинального изображения везде кроме маски
+# def apply_inst(image_orig, image_out, mask):
+#     image_out[:, :, 0] = np.where(mask != 0, image_orig[:, :, 0], 127)
+#     image_out[:, :, 1] = np.where(mask != 0, image_orig[:, :, 1], 127)
+#     image_out[:, :, 2] = np.where(mask != 0, image_orig[:, :, 2], 127)
+#     return image_out
+
+
+# Функция ресайза картинки через opencv
+def img_resize_cv(image, img_size):
+    """
+    :param image: исходное изображение
+    :param img_size: размер к которому приводить изображение
+    :return: изображение после ресайза
+    """
     curr_w = image.shape[1]
     curr_h = image.shape[0]
     # Рассчитаем коэффициент для изменения размера
     if curr_w > curr_h:
-        scale_img = IMG_SIZE / curr_w
+        scale_img = img_size / curr_w
     else:
-        scale_img = IMG_SIZE / curr_h
+        scale_img = img_size / curr_h
     # Новые размеры изображения
     new_width = int(curr_w * scale_img)
     new_height = int(curr_h * scale_img)
@@ -55,8 +89,47 @@ def img_resize(image):
     return image
 
 
+# Функция размытия контура маски
+def cut_and_blur_contour_cv(img, mask, cnt_thickness=4, kernel=(5, 5)):
+    """
+    Идея из https://ru.stackoverflow.com/questions/950969
+    :param img:
+    :param mask:
+    :param cnt_thickness:
+    :param kernel:
+    :return: result: изображение с нанесенной маской и размытым контуром
+    """
+    img = cv2.bitwise_and(img, img, mask=mask)
+    tmp = img.copy()
+    # prepare a blurred image
+    blur = cv2.GaussianBlur(img, kernel, 0)
+
+    # find contours
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # draw contours using passed [cnt_thickness] on a temporary image
+    _ = cv2.drawContours(tmp, contours, 0, (0, 255, 0), cnt_thickness)
+
+    # create contour mask
+    hsv = cv2.cvtColor(tmp, cv2.COLOR_RGB2HSV)
+    mask = cv2.inRange(hsv, (36, 25, 25), (70, 255, 255))
+
+    # apply contour mask
+    tmp = cv2.bitwise_and(blur, blur, mask=mask)
+
+    result = np.where(tmp > 0, blur, img)
+    # Image.fromarray(result).show()
+    return result
+
+
 # Функция предикта object detection
-def img_detection(model, img_file, out_file):
+def img_obj_detection(model, img_file, out_file):
+    """
+    Использован код из Tensorflow Object detection API
+    :param model: ранее загруженная модель
+    :param img_file: путь к исходному файлу картинки
+    :param out_file: путь куда записывать готовый файл
+    """
 
     image_data = tf.io.gfile.GFile(img_file, 'rb').read()
     image = Image.open(BytesIO(image_data))
@@ -91,7 +164,13 @@ def img_detection(model, img_file, out_file):
 
 
 # Функция предикта instance segmentation
-def img_segmention(model, img_file, out_file):
+def img_inst_segmention(model, img_file, out_file):
+    """
+    Использован код из Tensorflow Object detection API
+    :param model: ранее загруженная модель
+    :param img_file: путь к исходному файлу картинки
+    :param out_file: путь куда записывать готовый файл
+    """
 
     image_data = tf.io.gfile.GFile(img_file, 'rb').read()
     image = Image.open(BytesIO(image_data))
@@ -141,115 +220,85 @@ def img_segmention(model, img_file, out_file):
 
 
 # Функция удаления фона
-def img_background(model, img_file, out_file):
-
-    image_data = tf.io.gfile.GFile(img_file, 'rb').read()
-    image = Image.open(BytesIO(image_data))
-    (im_width, im_height) = image.size
-    image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
-
-    # Засеаем время и запускаем предикт
-    time_start = time.time()
-    results = model(image_np)
-    result = {key: value.numpy() for key, value in results.items()}
-    # print(result.keys())
-    time_end = time.time() - time_start
-    print('Время предикта: {0:.1f}'.format(time_end))
-
-    label_id_offset = 0
-    # image_np_with_mask = image_np.copy()
-
-    if 'detection_masks' in result:
-        # we need to convert np.arrays to tensors
-        detection_masks = tf.convert_to_tensor(result['detection_masks'][0])
-        detection_boxes = tf.convert_to_tensor(result['detection_boxes'][0])
-
-        # Reframe the bbox mask to the image size.
-        detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
-            detection_masks, detection_boxes,
-            image_np.shape[1], image_np.shape[2])
-        detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5,
-                                           tf.uint8)
-        result['detection_masks_reframed'] = detection_masks_reframed.numpy()
-
-    # Оставим только класс person == 1
-    # boxes = result['detection_boxes'][0]
-    classes = (result['detection_classes'][0] + label_id_offset).astype(int)
-    scores = result['detection_scores'][0]
-    #
-    indices = np.argwhere(classes == 1)
-    # boxes = np.squeeze(boxes[indices])
-    classes = np.squeeze(classes[indices])
-    scores = np.squeeze(scores[indices])
-    #
-    masks = result.get('detection_masks_reframed', None)
-    masks = np.squeeze(masks[indices])
-
-    # Функция наложения маски
-    def apply_mask(image, mask):
-        image[:, :, 0] = np.where(
-            mask == 0,
-            125,
-            image[:, :, 0]
-        )
-        image[:, :, 1] = np.where(
-            mask == 0,
-            15,
-            image[:, :, 1]
-        )
-        image[:, :, 2] = np.where(
-            mask == 0,
-            15,
-            image[:, :, 2]
-        )
-        return image
-    #
-    # def apply_inst(image_orig, image_out, mask):
-    #     image_out[:, :, 0] = np.where(
-    #         mask != 0,
-    #         image_orig[:, :, 0],
-    #         125
-    #     )
-    #     image_out[:, :, 1] = np.where(
-    #         mask != 0,
-    #         image_orig[:, :, 1],
-    #         12
-    #     )
-    #     image_out[:, :, 2] = np.where(
-    #         mask != 0,
-    #         image_orig[:, :, 2],
-    #         15
-    #     )
-    #     return image_out
-
-    for i in range(classes.shape[0]):
-        if scores[i] > 0.9:
-            image_bgrm = image_np[0].copy()
-            image_bgrm = apply_mask(image_bgrm, masks[i])
-            # Если найден не один объект, то будет несколько выходных файлов
-            filename, file_extension = os.path.splitext(out_file)
-            filename += '_' + str(i)
-            curr_file = filename + file_extension
-            print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
-            result = Image.fromarray(image_bgrm)
-            result.save(curr_file)
-    return
+# def img_rem_background(model, img_file, out_file):
+#     '''
+#     Использован код из Tensorflow Object detection API
+#     :param model: ранее загруженная модель
+#     :param img_file: путь к исходному файлу картинки
+#     :param out_file: путь куда записывать готовый файл
+#     '''
+#
+#     image_data = tf.io.gfile.GFile(img_file, 'rb').read()
+#     image = Image.open(BytesIO(image_data))
+#     (im_width, im_height) = image.size
+#     image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
+#
+#     # Засекаем время и запускаем предикт
+#     time_start = time.time()
+#     results = model(image_np)
+#     result = {key: value.numpy() for key, value in results.items()}
+#     # print(result.keys())
+#     time_end = time.time() - time_start
+#     print('Время предикта: {0:.1f}'.format(time_end))
+#
+#     label_id_offset = 0
+#     # image_np_with_mask = image_np.copy()
+#
+#     if 'detection_masks' in result:
+#         # we need to convert np.arrays to tensors
+#         detection_masks = tf.convert_to_tensor(result['detection_masks'][0])
+#         detection_boxes = tf.convert_to_tensor(result['detection_boxes'][0])
+#
+#         # Reframe the bbox mask to the image size.
+#         detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
+#             detection_masks, detection_boxes,
+#             image_np.shape[1], image_np.shape[2])
+#         detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5,
+#                                            tf.uint8)
+#         result['detection_masks_reframed'] = detection_masks_reframed.numpy()
+#
+#     # Оставим только класс person == 1
+#     # boxes = result['detection_boxes'][0]
+#     classes = (result['detection_classes'][0] + label_id_offset).astype(int)
+#     scores = result['detection_scores'][0]
+#     #
+#     indices = np.argwhere(classes == 1)
+#     # boxes = np.squeeze(boxes[indices])
+#     classes = np.squeeze(classes[indices])
+#     scores = np.squeeze(scores[indices])
+#     #
+#     masks = result.get('detection_masks_reframed', None)
+#     masks = np.squeeze(masks[indices])
+#
+#     for i in range(classes.shape[0]):
+#         if scores[i] > 0.9:
+#             image_bgrm = image_np[0].copy()
+#             image_bgrm = apply_mask(image_bgrm, masks[i])
+#             # Если найден не один объект, то будет несколько выходных файлов
+#             filename, file_extension = os.path.splitext(out_file)
+#             filename += '_' + str(i)
+#             curr_file = filename + file_extension
+#             print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
+#             result = Image.fromarray(image_bgrm)
+#             result.save(curr_file)
+#     return
 
 
-# Функция удаления фона с обработкой opencv
-def img_test(model, img_file, out_file):
-
-    # image_data = tf.io.gfile.GFile(img_file, 'rb').read()
-    # image = Image.open(BytesIO(image_data))
-    # (im_width, im_height) = image.size
-    # image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
-
+# Функция удаления фона с возможностью размывания контура сегментации
+def img_rem_background_blur(model, img_file, out_file, cont_blur=False):
+    """
+    Использован код из Tensorflow Object detection API и библиотека opencv
+    :param model: ранее загруженная модель
+    :param img_file: путь к исходному файлу картинки
+    :param out_file: путь куда записывать готовый файл
+    :param blur: размывать контур сегментации
+    """
     # Загрузим картинку и сменим модель цвета
     image = cv2.imread(img_file)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     # Сделаем резайз к целевому размеру
-    image = img_resize(image)
+    image = img_resize_cv(image, IMG_SIZE)
 
     # Добавим ось
     image_np = np.expand_dims(image, axis=0)
@@ -291,44 +340,42 @@ def img_test(model, img_file, out_file):
     masks = result.get('detection_masks_reframed', None)
     masks = np.squeeze(masks[indices])
 
-    # https://ru.stackoverflow.com/questions/950969
-    def cut_and_blur_contour(img, mask, cnt_thickness=4, kernel=(5, 5)):
-        # apply mask
-        # ii = Image.fromarray(img).show()
-        img = cv2.bitwise_and(img, img, mask=mask)
-        tmp = img.copy()
-        # ii = Image.fromarray(img).show()
-        # prepare a blurred image
-        blur = cv2.GaussianBlur(img, kernel, 0)
-
-
-        # find contours
-        ret, thresh = cv2.threshold(mask, 127, 255, 0)
-        # im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-        # draw contours using passed [cnt_thickness] on a temporary image
-        _ = cv2.drawContours(tmp, contours, 0, (0, 255, 0), cnt_thickness)
-
-        # create contour mask
-        # hsv = cv2.cvtColor(tmp, cv2.COLOR_BGR2HSV)
-        hsv = cv2.cvtColor(tmp, cv2.COLOR_RGB2HSV)
-        mask = cv2.inRange(hsv, (36, 25, 25), (70, 255, 255))
-
-        # apply contour mask
-        tmp = cv2.bitwise_and(blur, blur, mask=mask)
-        return np.where(tmp > 0, blur, img)
-
     for i in range(classes.shape[0]):
         if scores[i] > 0.9:
-            image_bgrm = image_np[0].copy()
-            image_bgrm = cut_and_blur_contour(image_bgrm, masks[i], cnt_thickness=4, kernel=(15, 15))
+            image_rembg = image_np[0].copy()
+            # Если задано заблюриваем контур
+            if cont_blur:
+                image_rembg = cut_and_blur_contour_cv(image_rembg, masks[i], cnt_thickness=10, kernel=(15, 15))
+            else:
+                image_rembg = apply_mask(image_rembg, masks[i])
 
             # Если найден не один объект, то будет несколько выходных файлов
             filename, file_extension = os.path.splitext(out_file)
             filename += '_' + str(i)
             curr_file = filename + file_extension
             print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
-            result = Image.fromarray(image_bgrm)
+            result = Image.fromarray(image_rembg)
             result.save(curr_file)
+    return
+
+
+# Функция удаления фона с обработкой только opencv
+def img_rem_background_cv(img_file, out_file):
+    """
+    Использована библиотека opencv
+    :param img_file: путь к исходному файлу картинки
+    :param out_file: путь куда записывать готовый файл
+    """
+
+    # Загрузим картинку и сменим модель цвета
+    image = cv2.imread(img_file)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # Сделаем резайз к целевому размеру
+    image = img_resize_cv(image, IMG_SIZE)
+
+    # TODO: сделать удаление фона средствами cv
+
+    # Сохраняем изображение
+    cv2.imwrite(out_file, image)
     return

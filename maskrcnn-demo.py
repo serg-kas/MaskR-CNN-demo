@@ -15,8 +15,9 @@ import os
 # Допустимые форматы изображений
 img_type_list = ['.jpg', '.jpeg', '.png']
 # Режимы работы
-operation_mode_list = ['object_detection', 'instant_segmentation', 'remove_background', 'test']
-default_mode = operation_mode_list[3]  # режим работы по умолчанию
+operation_mode_list = ['object_detection', 'instant_segmentation',
+                       'remove_background', 'remove_background_blur', 'remove_background_opencv']
+default_mode = operation_mode_list[4]  # режим работы по умолчанию
 # Модель URL
 MODEL_URL = "https://hub.tensorflow.google.cn/tensorflow/mask_rcnn/inception_resnet_v2_1024x1024/1"
 
@@ -52,6 +53,7 @@ def process(operation_mode, source_path, out_path):
         print('Картинок для обработки: {0}'.format(len(img_files)))
 
     # Парсинг режима работы
+    # Например по параметру командной строки obj установит режим работы object_detection и т.п.
     for mode in operation_mode_list:
         if operation_mode in mode:
             operation_mode = mode
@@ -66,13 +68,16 @@ def process(operation_mode, source_path, out_path):
         out_file = os.path.join(out_path, 'out_' + img)
         # Вызов функции предикта
         if operation_mode == 'object_detection':
-            run.img_detection(model, img_file, out_file)
+            run.img_obj_detection(model, img_file, out_file)
         if operation_mode == 'instant_segmentation':
-            run.img_segmention(model, img_file, out_file)
+            run.img_inst_segmention(model, img_file, out_file)
         if operation_mode == 'remove_background':
-            run.img_background(model, img_file, out_file)
-        if operation_mode == 'test':
-            run.img_test(model, img_file, out_file)
+            run.img_rem_background_blur(model, img_file, out_file, cont_blur=False)
+        if operation_mode == 'remove_background_blur':
+            run.img_rem_background_blur(model, img_file, out_file, cont_blur=True)
+        if operation_mode == 'remove_background_opencv':
+            run.img_rem_background_cv(img_file, out_file)
+
 
 if __name__ == '__main__':
     operation_mode = default_mode if len(sys.argv) <= 1 else sys.argv[1]
