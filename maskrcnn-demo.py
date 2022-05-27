@@ -61,7 +61,9 @@ def process(operation_mode, source_path, out_path):
     print('Режим работы: {}'.format(operation_mode))
 
     # Получаем модель и обрабатываем картинки
-    model = run.get_model(MODEL_URL)
+    if operation_mode != 'remove_background_opencv':
+        model = run.get_model(MODEL_URL)
+
     for img in img_files:
         # полные пути к файлам
         img_file = os.path.join(source_path, img)
