@@ -99,7 +99,9 @@ def cut_and_blur_contour_cv(img, mask, cnt_thickness=4, kernel=(5, 5)):
     :param kernel:
     :return: result: изображение с нанесенной маской и размытым контуром
     """
-    img = cv2.bitwise_and(img, img, mask=mask)
+    # img = cv2.bitwise_and(img, img, mask=mask)
+    img = apply_mask(img, mask)  # своя функция наложения маски
+
     tmp = img.copy()
     # prepare a blurred image
     blur = cv2.GaussianBlur(img, kernel, 0)
@@ -217,71 +219,6 @@ def img_inst_segmention(model, img_file, out_file):
     result = Image.fromarray(image_np_with_mask[0])
     result.save(out_file)
     return
-
-
-# Функция удаления фона
-# def img_rem_background(model, img_file, out_file):
-#     '''
-#     Использован код из Tensorflow Object detection API
-#     :param model: ранее загруженная модель
-#     :param img_file: путь к исходному файлу картинки
-#     :param out_file: путь куда записывать готовый файл
-#     '''
-#
-#     image_data = tf.io.gfile.GFile(img_file, 'rb').read()
-#     image = Image.open(BytesIO(image_data))
-#     (im_width, im_height) = image.size
-#     image_np = np.array(image.getdata()).reshape((1, im_height, im_width, 3)).astype(np.uint8)
-#
-#     # Засекаем время и запускаем предикт
-#     time_start = time.time()
-#     results = model(image_np)
-#     result = {key: value.numpy() for key, value in results.items()}
-#     # print(result.keys())
-#     time_end = time.time() - time_start
-#     print('Время предикта: {0:.1f}'.format(time_end))
-#
-#     label_id_offset = 0
-#     # image_np_with_mask = image_np.copy()
-#
-#     if 'detection_masks' in result:
-#         # we need to convert np.arrays to tensors
-#         detection_masks = tf.convert_to_tensor(result['detection_masks'][0])
-#         detection_boxes = tf.convert_to_tensor(result['detection_boxes'][0])
-#
-#         # Reframe the bbox mask to the image size.
-#         detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
-#             detection_masks, detection_boxes,
-#             image_np.shape[1], image_np.shape[2])
-#         detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5,
-#                                            tf.uint8)
-#         result['detection_masks_reframed'] = detection_masks_reframed.numpy()
-#
-#     # Оставим только класс person == 1
-#     # boxes = result['detection_boxes'][0]
-#     classes = (result['detection_classes'][0] + label_id_offset).astype(int)
-#     scores = result['detection_scores'][0]
-#     #
-#     indices = np.argwhere(classes == 1)
-#     # boxes = np.squeeze(boxes[indices])
-#     classes = np.squeeze(classes[indices])
-#     scores = np.squeeze(scores[indices])
-#     #
-#     masks = result.get('detection_masks_reframed', None)
-#     masks = np.squeeze(masks[indices])
-#
-#     for i in range(classes.shape[0]):
-#         if scores[i] > 0.9:
-#             image_bgrm = image_np[0].copy()
-#             image_bgrm = apply_mask(image_bgrm, masks[i])
-#             # Если найден не один объект, то будет несколько выходных файлов
-#             filename, file_extension = os.path.splitext(out_file)
-#             filename += '_' + str(i)
-#             curr_file = filename + file_extension
-#             print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
-#             result = Image.fromarray(image_bgrm)
-#             result.save(curr_file)
-#     return
 
 
 # Функция удаления фона с возможностью размывания контура сегментации
