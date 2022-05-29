@@ -6,5 +6,9 @@ Demonstration of the pre-trained Mask R-CNN network.
 Operation modes:
 1. Object detection
 2. Instance segmentation
-3. Person detecting and remove background 
+3. Person detecting and remove background
+4. Person detecting and remove background with cutting and blurring contour
+5. Removing the background only with opencv library
+
+
 
