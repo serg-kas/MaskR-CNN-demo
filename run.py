@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 import cv2
 import time
 import os
+#
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # закомментировать для использования GPU
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'   # уровень 2 - только сообщения об ошибках
 import tensorflow as tf
@@ -299,7 +300,7 @@ def img_rem_background_blur(model, img_file, out_file, cont_blur=False):
 # Функция удаления фона с обработкой только opencv
 def img_rem_background_cv(img_file, out_file):
     """
-    Использована библиотека opencv
+    Idea from https://stackoverflow.com/questions/29313667
     :param img_file: путь к исходному файлу картинки
     :param out_file: путь куда записывать готовый файл
     """
@@ -311,7 +312,55 @@ def img_rem_background_cv(img_file, out_file):
     # Сделаем резайз к целевому размеру
     image = img_resize_cv(image, IMG_SIZE)
 
-    # TODO: сделать удаление фона средствами cv
+    # #
+    # BLUR = 21
+    # CANNY_THRESH_1 = 10
+    # CANNY_THRESH_2 = 200
+    # MASK_DILATE_ITER = 10
+    # MASK_ERODE_ITER = 10
+    # MASK_COLOR = (0.0, 0.0, 1.0)  # In BGR format
+    #
+    # gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    #
+    # # -- Edge detection -------------------------------------------------------------------
+    # edges = cv2.Canny(gray, CANNY_THRESH_1, CANNY_THRESH_2)
+    # edges = cv2.dilate(edges, None)
+    # edges = cv2.erode(edges, None)
+    #
+    # # -- Find contours in edges, sort by area ---------------------------------------------
+    # contour_info = []
+    # # _, contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    # # Previously, for a previous version of cv2, this line was:
+    # contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    # # Thanks to notes from commenters, I've updated the code but left this note
+    # for c in contours:
+    #     contour_info.append((
+    #         c,
+    #         cv2.isContourConvex(c),
+    #         cv2.contourArea(c),
+    #     ))
+    # contour_info = sorted(contour_info, key=lambda c: c[2], reverse=True)
+    # max_contour = contour_info[0]
+    #
+    # # -- Create empty mask, draw filled polygon on it corresponding to largest contour ----
+    # # Mask is black, polygon is white
+    # mask = np.zeros(edges.shape)
+    # cv2.fillConvexPoly(mask, max_contour[0], (255))
+    #
+    # # -- Smooth mask, then blur it --------------------------------------------------------
+    # mask = cv2.dilate(mask, None, iterations=MASK_DILATE_ITER)
+    # mask = cv2.erode(mask, None, iterations=MASK_ERODE_ITER)
+    # mask = cv2.GaussianBlur(mask, (BLUR, BLUR), 0)
+    # mask_stack = np.dstack([mask] * 3)  # Create 3-channel alpha mask
+    #
+    # # -- Blend masked img into MASK_COLOR background --------------------------------------
+    # mask_stack = mask_stack.astype('float32') / 255.0  # Use float matrices,
+    # img = image.astype('float32') / 255.0  # for easy blending
+    #
+    # masked = (mask_stack * img) + ((1 - mask_stack) * MASK_COLOR)  # Blend
+    # masked = (masked * 255).astype('uint8')
+##########
+    # == Parameters =======================================================================
     BLUR = 21
     CANNY_THRESH_1 = 10
     CANNY_THRESH_2 = 200
@@ -319,6 +368,7 @@ def img_rem_background_cv(img_file, out_file):
     MASK_ERODE_ITER = 10
     MASK_COLOR = (0.0, 0.0, 1.0)  # In BGR format
 
+    # Переходим к ч/б
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # -- Edge detection -------------------------------------------------------------------
@@ -329,9 +379,7 @@ def img_rem_background_cv(img_file, out_file):
     # -- Find contours in edges, sort by area ---------------------------------------------
     contour_info = []
     # _, contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-    # Previously, for a previous version of cv2, this line was:
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-    # Thanks to notes from commenters, I've updated the code but left this note
     for c in contours:
         contour_info.append((
             c,
@@ -350,6 +398,7 @@ def img_rem_background_cv(img_file, out_file):
     mask = cv2.dilate(mask, None, iterations=MASK_DILATE_ITER)
     mask = cv2.erode(mask, None, iterations=MASK_ERODE_ITER)
     mask = cv2.GaussianBlur(mask, (BLUR, BLUR), 0)
+
     mask_stack = np.dstack([mask] * 3)  # Create 3-channel alpha mask
 
     # -- Blend masked img into MASK_COLOR background --------------------------------------
@@ -357,20 +406,17 @@ def img_rem_background_cv(img_file, out_file):
     img = image.astype('float32') / 255.0  # for easy blending
 
     masked = (mask_stack * img) + ((1 - mask_stack) * MASK_COLOR)  # Blend
-    masked = (masked * 255).astype('uint8')
+    masked = (masked * 255).astype('uint8')  # Convert back to 8-bit
 
-    #
+    # plt.imsave('img/girl_blue.png', masked)
     # split image into channels
-    c_red, c_green, c_blue = cv2.split(image)
+    c_red, c_green, c_blue = cv2.split(img)
 
     # merge with mask got on one of a previous steps
     img_a = cv2.merge((c_red, c_green, c_blue, mask.astype('float32') / 255.0))
 
-    masked = img_a * 255
 
     # Сохраняем изображение
-    # image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    # cv2.imwrite(out_file, img_a * 255)
     cv2.imwrite(out_file, masked)
-    # result = Image.fromarray(image)
-    # result.save(out_file)
     return
