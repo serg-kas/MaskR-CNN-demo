@@ -121,7 +121,6 @@ def cut_and_blur_contour_cv(img, mask, cnt_thickness=4, kernel=(5, 5)):
     tmp = cv2.bitwise_and(blur, blur, mask=mask)
 
     result = np.where(tmp > 0, blur, img)
-    # Image.fromarray(result).show()
     return result
 
 
@@ -132,41 +131,36 @@ def cut_and_canny_contour_cv(image, mask, cnt_thickness=4, kernel=(5, 5)):
     :param mask:
     :param cnt_thickness:
     :param kernel:
-    :return: result: изображение с нанесенной маской и размытым контуром
+    :return: result: изображение с нанесенной маской
     """
-    image_copy = image.copy()
+    #
+    image_backup = image.copy()
 
-    # ЗДЕСЬ ПОЛУЧАЕМ КОНТУР МАСКИ
-    # Накладываем маску на изображение
-    # img = cv2.bitwise_and(image, image, mask=mask)
+    # Накладываем полученную маску [mask] на изображение
     img = apply_mask(image, mask)  # своя функция наложения маски
     tmp = img.copy()
     # prepare a blurred image
     blur = cv2.GaussianBlur(img, kernel, 0)
-
     # find contours
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
     # draw contours using passed [cnt_thickness] on a temporary image
     _ = cv2.drawContours(tmp, contours, 0, (0, 255, 0), cnt_thickness)
-
     # create contour mask
     hsv = cv2.cvtColor(tmp, cv2.COLOR_RGB2HSV)
     cont_mask = cv2.inRange(hsv, (36, 25, 25), (70, 255, 255))
-    # Image.fromarray(cont_mask).show()
-    # apply contour mask
-    cont_mask = cv2.erode(cont_mask, None, iterations=3)
-    # Image.fromarray(cont_mask).show()
 
+    # EXPERIMENTAL
+    cont_mask = cv2.dilate(cont_mask, None, iterations=1)
+    cont_mask = cv2.erode(cont_mask, None, iterations=3)
+
+    # apply contour mask
     tmp = cv2.bitwise_and(blur, blur, mask=cont_mask)
     # Image.fromarray(tmp).show()
-    # result = np.where(tmp > 0, blur, img)
-    # Image.fromarray(result).show()
 
-    # ЗДЕСЬ ДЕЛАЕМ ПРЕОБРАЗОВАНИЕ CANNY
+    # ==== CANNY =====
     # Переходим к ч/б
-    gray = cv2.cvtColor(image_copy, cv2.COLOR_BGR2GRAY)
-    # Image.fromarray(gray).show()
+    gray = cv2.cvtColor(image_backup, cv2.COLOR_BGR2GRAY)
+
     # == Parameters =======================================================================
     BLUR = 21
     CANNY_THRESH_1 = 10
@@ -259,6 +253,10 @@ def img_obj_detection(model, img_file, out_file):
         agnostic_mode=False)
 
     result = Image.fromarray(image_np_with_detections[0])
+    # Сохраняем изображение
+    filename, file_extension = os.path.splitext(out_file)
+    filename += '_' + 'od'
+    out_file = filename + file_extension
     result.save(out_file)
     return
 
@@ -315,6 +313,10 @@ def img_inst_segmention(model, img_file, out_file):
         line_thickness=8)
 
     result = Image.fromarray(image_np_with_mask[0])
+    # Сохраняем изображение
+    filename, file_extension = os.path.splitext(out_file)
+    filename += '_' + 'segm'
+    out_file = filename + file_extension
     result.save(out_file)
     return
 
@@ -384,9 +386,12 @@ def img_rem_background_blur(model, img_file, out_file, cont_blur=False):
             else:
                 image_rembg = apply_mask(image_rembg, masks[i])
 
-            # Если найден не один объект, то будет несколько выходных файлов
+            # Сохраняем изображение
             filename, file_extension = os.path.splitext(out_file)
-            filename += '_' + str(i)
+            if cont_blur:
+                filename += '_' + 'rbblur' + '_' + str(i)
+            else:
+                filename += '_' + 'rbsegm' + '_' + str(i)
             curr_file = filename + file_extension
             print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
             result = Image.fromarray(image_rembg)
@@ -458,7 +463,7 @@ def img_rem_background_opencv_canny(img_file, out_file):
 
     # Сохраняем изображение
     filename, file_extension = os.path.splitext(out_file)
-    filename += '_' + 'canny'
+    filename += '_' + 'rbcanny'
     out_file = filename + file_extension
     #
     cv2.imwrite(out_file, masked)
@@ -525,7 +530,7 @@ def img_rem_background_test(model, img_file, out_file):
             image_rembg = cut_and_canny_contour_cv(image_rembg, masks[i], cnt_thickness=10, kernel=(15, 15))
             # Сохраняем изображение
             filename, file_extension = os.path.splitext(out_file)
-            filename += '_' + 'test' + '_' + str(i)
+            filename += '_' + 'rbtest' + '_' + str(i)
             curr_file = filename + file_extension
             print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
             result = Image.fromarray(image_rembg)
