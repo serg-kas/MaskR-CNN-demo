@@ -9,11 +9,11 @@ Operation modes:
 3. Person detecting and remove background
 4. Person detecting and remove background with cutting and blurring contour
 5. Removing the background only with opencv Canny Edge Detection 
-6. Person detecting and remove background with cutting contour and fine-tuning it by canny masked image (experimental). 
+6. Person detecting and remove background with cutting contour and fine-tuning it (experimental). 
 
-![Original](https://github.com/serg-kas/MaskR-CNN-demo/blob/master/presets/111.jpg)
+![Original](https://github.com/serg-kas/MaskR-CNN-demo/blob/master/example.png)
 
-![Original](https://github.com/serg-kas/MaskR-CNN-demo/raw/master/presets/111.png)
+
 
 
 See other examples in folder "presets".
