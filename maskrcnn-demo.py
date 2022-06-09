@@ -2,9 +2,9 @@
 Демонстрация предобученной архитектуры Mask-R-CNN в
 нескольких режимах работы (object detection, segmentation,remove_background).
 При запуске обрабатывает все файлы из папки source_files
-Результат помещает в папку out_files, добавляя к имени "out_"
-Если файл с таким названием уже обрабатывался (есть в папке out_files), то его пропускает
+Результат помещается в папку out_files.
 Режим работы можно передать параметром командной строки.
+Достаточно передать подстроку из названия режима.
 """
 # Модуль с функциями
 import run
@@ -37,14 +37,13 @@ def process(operation_mode, source_path, out_path):
 
     # Создадим список файлов картинок для обработки
     source_files = sorted(os.listdir(source_path))
-    out_files = sorted(os.listdir(out_path))
+    # out_files = sorted(os.listdir(out_path))
     img_files = []
     for f in source_files:
         filename, file_extension = os.path.splitext(f)
-        # TODO: Если картинка дает несколько выходных файлов, то она будет повторно обрабатываться
-        if not (('out_'+f) in out_files):
-            if file_extension in img_type_list:
-                img_files.append(f)
+        # if not (('out_'+f) in out_files):
+        if file_extension in img_type_list:
+            img_files.append(f)
 
     # Если обрабатывать нечего, то выходим
     if len(img_files) == 0:
@@ -66,10 +65,10 @@ def process(operation_mode, source_path, out_path):
         print('Загружаем модель...')
         model = run.get_model(MODEL_URL)
 
-    for img in img_files:
+    for file in img_files:
         # полные пути к файлам
-        img_file = os.path.join(source_path, img)
-        out_file = os.path.join(out_path, 'out_' + img)
+        img_file = os.path.join(source_path, file)
+        out_file = os.path.join(out_path, file)
         # Вызов функции предикта
         if operation_mode == 'object_detection':
             run.img_obj_detection(model, img_file, out_file)

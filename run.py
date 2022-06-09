@@ -134,11 +134,12 @@ def cut_and_canny_contour_cv(image, mask, cnt_thickness=4, kernel=(5, 5)):
     :param kernel:
     :return: result: изображение с нанесенной маской и размытым контуром
     """
+    image_copy = image.copy()
+
     # ЗДЕСЬ ПОЛУЧАЕМ КОНТУР МАСКИ
     # Накладываем маску на изображение
     # img = cv2.bitwise_and(image, image, mask=mask)
     img = apply_mask(image, mask)  # своя функция наложения маски
-
     tmp = img.copy()
     # prepare a blurred image
     blur = cv2.GaussianBlur(img, kernel, 0)
@@ -152,17 +153,20 @@ def cut_and_canny_contour_cv(image, mask, cnt_thickness=4, kernel=(5, 5)):
     # create contour mask
     hsv = cv2.cvtColor(tmp, cv2.COLOR_RGB2HSV)
     cont_mask = cv2.inRange(hsv, (36, 25, 25), (70, 255, 255))
-
+    # Image.fromarray(cont_mask).show()
     # apply contour mask
-    tmp = cv2.bitwise_and(blur, blur, mask=cont_mask)
+    cont_mask = cv2.erode(cont_mask, None, iterations=3)
+    # Image.fromarray(cont_mask).show()
 
+    tmp = cv2.bitwise_and(blur, blur, mask=cont_mask)
+    # Image.fromarray(tmp).show()
     # result = np.where(tmp > 0, blur, img)
     # Image.fromarray(result).show()
 
     # ЗДЕСЬ ДЕЛАЕМ ПРЕОБРАЗОВАНИЕ CANNY
     # Переходим к ч/б
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
+    gray = cv2.cvtColor(image_copy, cv2.COLOR_BGR2GRAY)
+    # Image.fromarray(gray).show()
     # == Parameters =======================================================================
     BLUR = 21
     CANNY_THRESH_1 = 10
@@ -171,6 +175,7 @@ def cut_and_canny_contour_cv(image, mask, cnt_thickness=4, kernel=(5, 5)):
     MASK_ERODE_ITER = 10
     # MASK_COLOR = (0.0, 0.0, 1.0)  # Red mask
     MASK_COLOR = (0.5, 0.5, 0.5)  # Gray Mask
+    # MASK_COLOR = (0.0, 0.0, 0.0)  # Black Mask
 
     # -- Edge detection -------------------------------------------------------------------
     edges = cv2.Canny(gray, CANNY_THRESH_1, CANNY_THRESH_2)
@@ -452,11 +457,15 @@ def img_rem_background_opencv_canny(img_file, out_file):
     masked = (masked * 255).astype('uint8')  # Convert back to 8-bit
 
     # Сохраняем изображение
+    filename, file_extension = os.path.splitext(out_file)
+    filename += '_' + 'canny'
+    out_file = filename + file_extension
+    #
     cv2.imwrite(out_file, masked)
     return
 
 
-# Функция удаления фона с обработкой opencv
+# Функция в разработке
 def img_rem_background_test(model, img_file, out_file):
     """
     :param img_file: путь к исходному файлу картинки
@@ -513,11 +522,10 @@ def img_rem_background_test(model, img_file, out_file):
         if scores[i] > 0.9:
             image_rembg = image_np[0].copy()
             # Получаем контур маски и заполняем его преобразованием canny
-            image_rembg = cut_and_canny_contour_cv(image_rembg, masks[i], cnt_thickness=5, kernel=(15, 15))
-
-            # Если найден не один объект, то будет несколько выходных файлов
+            image_rembg = cut_and_canny_contour_cv(image_rembg, masks[i], cnt_thickness=10, kernel=(15, 15))
+            # Сохраняем изображение
             filename, file_extension = os.path.splitext(out_file)
-            filename += '_' + str(i)
+            filename += '_' + 'test' + '_' + str(i)
             curr_file = filename + file_extension
             print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
             result = Image.fromarray(image_rembg)
