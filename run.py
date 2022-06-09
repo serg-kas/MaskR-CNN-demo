@@ -90,7 +90,7 @@ def img_resize_cv(image, img_size):
     return image
 
 
-# Функция размытия контура маски
+# Функция получения и размытия контура маски
 def cut_and_blur_contour_cv(img, mask, cnt_thickness=4, kernel=(5, 5)):
     """
     Idea from https://ru.stackoverflow.com/questions/950969
@@ -121,6 +121,98 @@ def cut_and_blur_contour_cv(img, mask, cnt_thickness=4, kernel=(5, 5)):
     tmp = cv2.bitwise_and(blur, blur, mask=mask)
 
     result = np.where(tmp > 0, blur, img)
+    # Image.fromarray(result).show()
+    return result
+
+
+# Функция получения контура маски и заливки его результатом преобразования canny
+def cut_and_canny_contour_cv(image, mask, cnt_thickness=4, kernel=(5, 5)):
+    """
+    :param img:
+    :param mask:
+    :param cnt_thickness:
+    :param kernel:
+    :return: result: изображение с нанесенной маской и размытым контуром
+    """
+    # ЗДЕСЬ ПОЛУЧАЕМ КОНТУР МАСКИ
+    # Накладываем маску на изображение
+    # img = cv2.bitwise_and(image, image, mask=mask)
+    img = apply_mask(image, mask)  # своя функция наложения маски
+
+    tmp = img.copy()
+    # prepare a blurred image
+    blur = cv2.GaussianBlur(img, kernel, 0)
+
+    # find contours
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # draw contours using passed [cnt_thickness] on a temporary image
+    _ = cv2.drawContours(tmp, contours, 0, (0, 255, 0), cnt_thickness)
+
+    # create contour mask
+    hsv = cv2.cvtColor(tmp, cv2.COLOR_RGB2HSV)
+    cont_mask = cv2.inRange(hsv, (36, 25, 25), (70, 255, 255))
+
+    # apply contour mask
+    tmp = cv2.bitwise_and(blur, blur, mask=cont_mask)
+
+    # result = np.where(tmp > 0, blur, img)
+    # Image.fromarray(result).show()
+
+    # ЗДЕСЬ ДЕЛАЕМ ПРЕОБРАЗОВАНИЕ CANNY
+    # Переходим к ч/б
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # == Parameters =======================================================================
+    BLUR = 21
+    CANNY_THRESH_1 = 10
+    CANNY_THRESH_2 = 200
+    MASK_DILATE_ITER = 10
+    MASK_ERODE_ITER = 10
+    # MASK_COLOR = (0.0, 0.0, 1.0)  # Red mask
+    MASK_COLOR = (0.5, 0.5, 0.5)  # Gray Mask
+
+    # -- Edge detection -------------------------------------------------------------------
+    edges = cv2.Canny(gray, CANNY_THRESH_1, CANNY_THRESH_2)
+    edges = cv2.dilate(edges, None)
+    edges = cv2.erode(edges, None)
+
+    # -- Find contours in edges, sort by area ---------------------------------------------
+    contour_info = []
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    for c in contours:
+        contour_info.append((
+            c,
+            cv2.isContourConvex(c),
+            cv2.contourArea(c),
+        ))
+    contour_info = sorted(contour_info, key=lambda c: c[2], reverse=True)
+    max_contour = contour_info[0]
+
+    # -- Create empty mask, draw filled polygon on it corresponding to largest contour ----
+    # Mask is black, polygon is white
+    canny_mask = np.zeros(edges.shape)
+    cv2.fillConvexPoly(canny_mask, max_contour[0], (255))
+
+    # -- Smooth mask, then blur it --------------------------------------------------------
+    canny_mask = cv2.dilate(canny_mask, None, iterations=MASK_DILATE_ITER)
+    canny_mask = cv2.erode(canny_mask, None, iterations=MASK_ERODE_ITER)
+    canny_mask = cv2.GaussianBlur(canny_mask, (BLUR, BLUR), 0)
+
+    mask_stack = np.dstack([canny_mask] * 3)  # Create 3-channel alpha mask
+
+    # -- Blend masked img into MASK_COLOR background --------------------------------------
+    mask_stack = mask_stack.astype('float32') / 255.0  # Use float matrices,
+    tmp_img = image.astype('float32') / 255.0  # for easy blending
+
+    canny_masked = (mask_stack * tmp_img) + ((1 - mask_stack) * MASK_COLOR)  # Blend
+    canny_masked = (canny_masked * 255).astype('uint8')  # Convert back to 8-bit
+    # Image.fromarray(canny_masked).show()
+
+    #
+    # result = np.where(tmp > 0, blur, img)
+    # result = np.where(tmp > 0, canny_masked, result)
+    result = np.where(tmp > 0, canny_masked, img)
     # Image.fromarray(result).show()
     return result
 
@@ -297,8 +389,8 @@ def img_rem_background_blur(model, img_file, out_file, cont_blur=False):
     return
 
 
-# Функция удаления фона с обработкой только opencv
-def img_rem_background_cv(img_file, out_file):
+# Функция удаления фона с обработкой opencv
+def img_rem_background_opencv_canny(img_file, out_file):
     """
     Idea from https://stackoverflow.com/questions/29313667
     :param img_file: путь к исходному файлу картинки
@@ -320,7 +412,8 @@ def img_rem_background_cv(img_file, out_file):
     CANNY_THRESH_2 = 200
     MASK_DILATE_ITER = 10
     MASK_ERODE_ITER = 10
-    MASK_COLOR = (0.0, 0.0, 1.0)  # In BGR format
+    # MASK_COLOR = (0.0, 0.0, 1.0)  # Red mask
+    MASK_COLOR = (0.5, 0.5, 0.5)  # Gray Mask
 
     # -- Edge detection -------------------------------------------------------------------
     edges = cv2.Canny(gray, CANNY_THRESH_1, CANNY_THRESH_2)
@@ -329,7 +422,6 @@ def img_rem_background_cv(img_file, out_file):
 
     # -- Find contours in edges, sort by area ---------------------------------------------
     contour_info = []
-    # _, contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     for c in contours:
         contour_info.append((
@@ -361,4 +453,73 @@ def img_rem_background_cv(img_file, out_file):
 
     # Сохраняем изображение
     cv2.imwrite(out_file, masked)
+    return
+
+
+# Функция удаления фона с обработкой opencv
+def img_rem_background_test(model, img_file, out_file):
+    """
+    :param img_file: путь к исходному файлу картинки
+    :param out_file: путь куда записывать готовый файл
+    """
+    # Загрузим картинку и сменим модель цвета
+    image = cv2.imread(img_file)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # Сделаем резайз к целевому размеру
+    image = img_resize_cv(image, IMG_SIZE)
+
+    # Добавим ось
+    image_np = np.expand_dims(image, axis=0)
+
+    # Засекаем время и запускаем предикт
+    time_start = time.time()
+    results = model(image_np)
+    result = {key: value.numpy() for key, value in results.items()}
+    # print(result.keys())
+    time_end = time.time() - time_start
+    print('Время предикта: {0:.1f}'.format(time_end))
+
+    label_id_offset = 0
+    # image_np_with_mask = image_np.copy()
+
+    if 'detection_masks' in result:
+        # we need to convert np.arrays to tensors
+        detection_masks = tf.convert_to_tensor(result['detection_masks'][0])
+        detection_boxes = tf.convert_to_tensor(result['detection_boxes'][0])
+
+        # Reframe the bbox mask to the image size.
+        detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
+            detection_masks, detection_boxes,
+            image_np.shape[1], image_np.shape[2])
+        detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5,
+                                           tf.uint8)
+        result['detection_masks_reframed'] = detection_masks_reframed.numpy()
+
+    # Оставим только класс person == 1
+    # boxes = result['detection_boxes'][0]
+    classes = (result['detection_classes'][0] + label_id_offset).astype(int)
+    scores = result['detection_scores'][0]
+    #
+    indices = np.argwhere(classes == 1)
+    # boxes = np.squeeze(boxes[indices])
+    classes = np.squeeze(classes[indices])
+    scores = np.squeeze(scores[indices])
+    #
+    masks = result.get('detection_masks_reframed', None)
+    masks = np.squeeze(masks[indices])
+
+    for i in range(classes.shape[0]):
+        if scores[i] > 0.9:
+            image_rembg = image_np[0].copy()
+            # Получаем контур маски и заполняем его преобразованием canny
+            image_rembg = cut_and_canny_contour_cv(image_rembg, masks[i], cnt_thickness=5, kernel=(15, 15))
+
+            # Если найден не один объект, то будет несколько выходных файлов
+            filename, file_extension = os.path.splitext(out_file)
+            filename += '_' + str(i)
+            curr_file = filename + file_extension
+            print('Сохраняется {0}, scores={1:.4f}'.format(curr_file, scores[i]))
+            result = Image.fromarray(image_rembg)
+            result.save(curr_file)
     return
