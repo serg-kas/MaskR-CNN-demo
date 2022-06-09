@@ -17,7 +17,7 @@ img_type_list = ['.jpg', '.jpeg', '.png']
 # Режимы работы
 operation_mode_list = ['object_detection', 'instant_segmentation',
                        'remove_background', 'remove_background_blur', 'remove_background_opencv']
-default_mode = operation_mode_list[4]  # режим работы по умолчанию
+default_mode = 'remove_background_opencv'  # режим работы по умолчанию
 # Модель URL
 MODEL_URL = "https://hub.tensorflow.google.cn/tensorflow/mask_rcnn/inception_resnet_v2_1024x1024/1"
 
